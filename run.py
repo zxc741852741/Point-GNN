@@ -134,7 +134,7 @@ for _ in range(len(config['runtime_graph_gen_kwargs']['level_configs'])):
 t_is_training = tf.placeholder(dtype=tf.bool, shape=[])
 model = get_model(config['model_name'])(num_classes=NUM_CLASSES,
     box_encoding_len=BOX_ENCODING_LEN, mode='test', **config['model_kwargs'])
-t_logits, t_pred_box = model.predict(
+t_logits, t_pred_box,tfeatures_list = model.predict(
     t_initial_vertex_features, t_vertex_coord_list, t_keypoint_indices_list,
     t_edges_list,
     t_is_training)
@@ -146,7 +146,8 @@ fetches = {
     'step': global_step,
     'predictions': t_predictions,
     'probs': t_probs,
-    'pred_box': t_pred_box
+    'pred_box': t_pred_box,
+    'tfeatures_list': tfeatures_list
     }
 # setup Visualizer ============================================================
 if VISUALIZATION_LEVEL == 1:
@@ -258,6 +259,7 @@ with tf.Session(graph=graph,
             dict(zip(t_keypoint_indices_list, keypoint_indices_list)))
         feed_dict.update(dict(zip(t_vertex_coord_list, vertex_coord_list)))
         results = sess.run(fetches, feed_dict=feed_dict)
+        print('results = {}'.format(results))
         gnn_time = time.time()
         time_dict['gnn inference'] = time_dict.get('gnn inference', 0) \
             + gnn_time - graph_time

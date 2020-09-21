@@ -147,12 +147,13 @@ class MultiLayerFastLocalGraphModelV2(object):
 
                         tfeatures_list.append(tfeatures)
                         print('Feature Dim:' + str(tfeatures.shape[-1]))
+
                 predictor_config = self._layer_configs[-1]
                 assert (predictor_config['type']=='classaware_predictor' or
                     predictor_config['type']=='classaware_predictor_128' or
                     predictor_config['type']=='classaware_separated_predictor')
                 predictor = self._default_layers_type[predictor_config['type']]
-                print('Final Feature Dim:'+str(tfeatures.shape[-1]))
+                print('Fin  al Feature Dim:'+str(tfeatures.shape[-1]))
                 with tf.variable_scope(predictor_config['scope'],
                 reuse=tf.AUTO_REUSE):
                     logits, box_encodings =  predictor.apply_regular(tfeatures,
@@ -160,7 +161,7 @@ class MultiLayerFastLocalGraphModelV2(object):
                         box_encoding_len=self.box_encoding_len,
                         **predictor_config['kwargs'])
                     print("Prediction %d classes" % self.num_classes)
-        return logits, box_encodings
+        return logits, box_encodings,tfeatures_list
 
     def postprocess(self, logits):
         """Output predictions. """
