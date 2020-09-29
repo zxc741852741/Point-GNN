@@ -125,6 +125,9 @@ class MultiLayerFastLocalGraphModelV2(object):
                     t_vertex_coordinates = t_vertex_coord_list[graph_level]
                     t_keypoint_indices = t_keypoint_indices_list[graph_level]
                     t_edges = t_edges_list[graph_level]
+                    tfeatures_1 = tfeatures
+
+
                     with tf.variable_scope(layer_scope, reuse=tf.AUTO_REUSE):
                         flgn = self._default_layers_type[layer_type]
                         print('@ level %d Graph, Add layer: %s, type: %s'%
@@ -147,7 +150,11 @@ class MultiLayerFastLocalGraphModelV2(object):
 
                         tfeatures_list.append(tfeatures)
                         print('Feature Dim:' + str(tfeatures.shape[-1]))
-
+                import numpy as np
+                #img
+                dis_1 = tf.sqrt(tf.reduce_sum(tf.square(t_vertex_coordinates[t_edges[2][0]]-t_vertex_coordinates[t_edges[0][1]])))
+                #dis_1 = np.sqrt(( (t_vertex_coordinates[t_edges[0][0]]-t_vertex_coordinates[t_edges[0][1]])**2).eval(session=sess))
+                dis_2 =  tf.sqrt(tf.reduce_sum(tf.square(t_vertex_coordinates[t_edges[3][0]]-t_vertex_coordinates[t_edges[0][1]])))
                 predictor_config = self._layer_configs[-1]
                 assert (predictor_config['type']=='classaware_predictor' or
                     predictor_config['type']=='classaware_predictor_128' or
@@ -161,7 +168,7 @@ class MultiLayerFastLocalGraphModelV2(object):
                         box_encoding_len=self.box_encoding_len,
                         **predictor_config['kwargs'])
                     print("Prediction %d classes" % self.num_classes)
-        return logits, box_encodings,tfeatures_list
+        return logits, box_encodings,tfeatures_1,t_edges,t_vertex_coordinates,dis_1,dis_2
 
     def postprocess(self, logits):
         """Output predictions. """

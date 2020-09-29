@@ -134,7 +134,7 @@ for _ in range(len(config['runtime_graph_gen_kwargs']['level_configs'])):
 t_is_training = tf.placeholder(dtype=tf.bool, shape=[])
 model = get_model(config['model_name'])(num_classes=NUM_CLASSES,
     box_encoding_len=BOX_ENCODING_LEN, mode='test', **config['model_kwargs'])
-t_logits, t_pred_box,tfeatures_list = model.predict(
+t_logits, t_pred_box,tfeatures_list,t_edges,t_vertex_coordinates,dis_1,dis_2 = model.predict(
     t_initial_vertex_features, t_vertex_coord_list, t_keypoint_indices_list,
     t_edges_list,
     t_is_training)
@@ -142,12 +142,32 @@ t_probs = model.postprocess(t_logits)
 t_predictions = tf.argmax(t_probs, axis=1, output_type=tf.int32)
 # optimizers ==================================================================
 global_step = tf.Variable(0, dtype=tf.int32, trainable=False)
+'''coco_1 = t_vertex_coordinates[t_edges[0][0]]
+coco_2 = t_vertex_coordinates[t_edges[1][0]]
+de = t_vertex_coordinates[t_edges[0][1]]
+
+dis_1 = (coco_1 - de)**2
+dis_1 = np.sqrt(dis_1)
+dis_2 = (coco_2 - de)**2
+dis_2 = np.sqrt(dis_2)'''
+
 fetches = {
     'step': global_step,
     'predictions': t_predictions,
     'probs': t_probs,
     'pred_box': t_pred_box,
-    'tfeatures_list': tfeatures_list
+    'tfeatures_list': tfeatures_list,
+    't_edges': t_edges,
+    't_vertex_coordinates': t_vertex_coordinates,
+
+    #'coco_1': t_vertex_coordinates[t_edges[0][0]],
+    #'coco_2': t_vertex_coordinates[t_edges[1][0]],
+
+    #'de': t_vertex_coordinates[t_edges[0][1]],
+    'dis_1':dis_1,
+    'dis_2':dis_2
+    #'dis_1': np.sqrt(( t_vertex_coordinates[t_edges[0][0]]-t_vertex_coordinates[t_edges[0][1]])**2),
+    #'dis_2': np.sqrt(( t_vertex_coordinates[t_edges[1][0]]-t_vertex_coordinates[t_edges[0][1]])**2)
     }
 # setup Visualizer ============================================================
 if VISUALIZATION_LEVEL == 1:
