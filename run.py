@@ -134,7 +134,7 @@ for _ in range(len(config['runtime_graph_gen_kwargs']['level_configs'])):
 t_is_training = tf.placeholder(dtype=tf.bool, shape=[])
 model = get_model(config['model_name'])(num_classes=NUM_CLASSES,
     box_encoding_len=BOX_ENCODING_LEN, mode='test', **config['model_kwargs'])
-t_logits, t_pred_box,tfeatures_list,t_edges,t_vertex_coordinates,dis_1,dis_2 = model.predict(
+t_logits, t_pred_box,tfeatures_list,t_edges,t_vertex_coordinates,dis_2,dis_1 = model.predict(
     t_initial_vertex_features, t_vertex_coord_list, t_keypoint_indices_list,
     t_edges_list,
     t_is_training)
