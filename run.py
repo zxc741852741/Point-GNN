@@ -65,6 +65,59 @@ CHECKPOINT_PATH = args.checkpoint_path
 CONFIG_PATH = os.path.join(CHECKPOINT_PATH, 'config')
 assert os.path.isfile(CONFIG_PATH), 'No config file found in %s'
 config = load_config(CONFIG_PATH)
+
+
+##set_ros_data#################
+import rospy
+from sensor_msgs.msg import PointCloud2,PointField ,PointCloud
+import sys
+sys.path.insert(0,'/usr/local/lib/python3.7/dist-packages')  
+#print(sys.path)
+import pcl
+import sensor_msgs.point_cloud2 as pcl2 
+sys.path.insert(0,'/home/user/anaconda3/lib/python3.7/site-packages/')  
+import ros_numpy
+import math
+def lidar_callback(data):
+    pc = ros_numpy.numpify(data)
+    #print(pc)
+    points=np.zeros((pc.shape[0],5))
+    rotation_points = np.zeros((pc.shape[0],4))
+    #print('x:{}'.format(pc['x']))
+    '''print('y:{}'.format(pc['y']))
+    print('-x:{}'.format(-pc['x']))
+    print('-y:{}'.format(-pc['y']))'''
+    points[:,0]=pc['x']
+    points[:,1]=pc['y']
+    points[:,2]=pc['z']
+    #intensity = pc['I']
+    intensity = pc['intensity']/255
+    points[:,3]=intensity
+    points[:,4] = np.zeros(pc.shape[0])
+    #print('points = {}'.format(points))
+    #points.astype(np.int32)
+    return points
+def points_rotation(points,yaw):
+    yaw = yaw*math.pi/180
+    R = np.array([[np.cos(yaw),-np.sin(yaw)],[np.sin(yaw),np.cos(yaw)]])
+    out_points = points.copy()
+    x_y_points = points.copy()
+    x_y_points = x_y_points[:,:2]
+    rotation_points = np.dot(x_y_points, R.T)
+    out_points[:,:2] = rotation_points
+    return out_points
+
+
+#msg = rospy.wait_for_message("/points_raw", PointCloud2, timeout=None) #lab_data
+
+'''pt = lidar_callback(msg)
+points = pt.copy()
+ros_lidar = points
+print(points)'''
+
+### set_ros_data ########################
+
+
 # setup dataset ===============================================================
 if IS_TEST:
     dataset = KittiDataset(
@@ -98,6 +151,8 @@ def occlusion(label, xyz):
         /(upper[2] - lower[2])
     return x_cover_rate*y_cover_rate*z_cover_rate
 # setup model =================================================================
+
+
 BOX_ENCODING_LEN = get_encoding_len(config['box_encoding_method'])
 box_encoding_fn = get_box_encoding_fn(config['box_encoding_method'])
 box_decoding_fn = get_box_decoding_fn(config['box_encoding_method'])
@@ -169,66 +224,84 @@ fetches = {
     #'dis_1': np.sqrt(( t_vertex_coordinates[t_edges[0][0]]-t_vertex_coordinates[t_edges[0][1]])**2),
     #'dis_2': np.sqrt(( t_vertex_coordinates[t_edges[1][0]]-t_vertex_coordinates[t_edges[0][1]])**2)
     }
-# setup Visualizer ============================================================
-if VISUALIZATION_LEVEL == 1:
-    print("Configure the viewpoint as you want and press [q]")
-    calib = dataset.get_calib(0)
-    cam_points_in_img_with_rgb = dataset.get_cam_points_in_image_with_rgb(0,
-        calib=calib)
-    vis = open3d.Visualizer()
-    vis.create_window()
-    pcd = open3d.PointCloud()
-    pcd.points = open3d.Vector3dVector(cam_points_in_img_with_rgb.xyz)
-    pcd.colors = open3d.Vector3dVector(cam_points_in_img_with_rgb.attr[:,1:4])
-    line_set = open3d.LineSet()
-    graph_line_set = open3d.LineSet()
-    box_corners = np.array([[0, 0, 0]])
-    box_edges = np.array([[0,0]])
-    line_set.points = open3d.Vector3dVector(box_corners)
-    line_set.lines = open3d.Vector2iVector(box_edges)
-    graph_line_set.points = open3d.Vector3dVector(box_corners)
-    graph_line_set.lines = open3d.Vector2iVector(box_edges)
-    vis.add_geometry(pcd)
-    vis.add_geometry(line_set)
-    vis.add_geometry(graph_line_set)
-    ctr = vis.get_view_control()
-    ctr.rotate(0.0, 3141.0, 0)
-    vis.run()
-color_map = np.array([(211,211,211), (255, 0, 0), (255,20,147), (65, 244, 101),
-    (169, 244, 65), (65, 79, 244), (65, 181, 244), (229, 244, 66)],
-    dtype=np.float32)
-color_map = color_map/255.0
-gt_color_map = {
-    'Pedestrian': (0,255,255),
-    'Person_sitting': (218,112,214),
-    'Car': (154,205,50),
-    'Truck':(255,215,0),
-    'Van': (255,20,147),
-    'Tram': (250,128,114),
-    'Misc': (128,0,128),
-    'Cyclist': (255,165,0),
-}
+
+
 # runing network ==============================================================
 time_dict = {}
 saver = tf.train.Saver()
 graph = tf.get_default_graph()
 gpu_options = tf.GPUOptions(allow_growth=True)
-with tf.Session(graph=graph,
-    config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-    sess.run(tf.variables_initializer(tf.global_variables()))
-    sess.run(tf.variables_initializer(tf.local_variables()))
-    model_path = tf.train.latest_checkpoint(CHECKPOINT_PATH)
-    print('Restore from checkpoint %s' % model_path)
-    saver.restore(sess, model_path)
-    previous_step = sess.run(global_step)
-    for frame_idx in tqdm(range(0, NUM_TEST_SAMPLE)):
+
+
+rospy.init_node('listener', anonymous=True)
+def callback(data):
+    # setup Visualizer ============================================================
+    if VISUALIZATION_LEVEL == 1:
+        print("Configure the viewpoint as you want and press [q]")
+        calib = dataset.get_calib(0)
+        cam_points_in_img_with_rgb = dataset.get_cam_points_in_image_with_rgb(0,
+            calib=calib)
+        vis = open3d.Visualizer()
+        vis.create_window()
+        pcd = open3d.PointCloud()
+        pcd.points = open3d.Vector3dVector(cam_points_in_img_with_rgb.xyz)
+        pcd.colors = open3d.Vector3dVector(cam_points_in_img_with_rgb.attr[:,1:4])
+        line_set = open3d.LineSet()
+        graph_line_set = open3d.LineSet()
+        box_corners = np.array([[0, 0, 0]])
+        box_edges = np.array([[0,0]])
+        line_set.points = open3d.Vector3dVector(box_corners)
+        line_set.lines = open3d.Vector2iVector(box_edges)
+        graph_line_set.points = open3d.Vector3dVector(box_corners)
+        graph_line_set.lines = open3d.Vector2iVector(box_edges)
+        vis.add_geometry(pcd)
+        vis.add_geometry(line_set)
+        vis.add_geometry(graph_line_set)
+        ctr = vis.get_view_control()
+        ctr.rotate(0.0, 3141.0, 0)
+        vis.run()
+    color_map = np.array([(211,211,211), (255, 0, 0), (255,20,147), (65, 244, 101),
+        (169, 244, 65), (65, 79, 244), (65, 181, 244), (229, 244, 66)],
+        dtype=np.float32)
+    color_map = color_map/255.0
+    gt_color_map = {
+        'Pedestrian': (0,255,255),
+        'Person_sitting': (218,112,214),
+        'Car': (154,205,50),
+        'Truck':(255,215,0),
+        'Van': (255,20,147),
+        'Tram': (250,128,114),
+        'Misc': (128,0,128),
+        'Cyclist': (255,165,0),
+    }
+    with tf.Session(graph=graph,
+        config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
+        sess.run(tf.variables_initializer(tf.global_variables()))
+        sess.run(tf.variables_initializer(tf.local_variables()))
+        model_path = tf.train.latest_checkpoint(CHECKPOINT_PATH)
+        print('Restore from checkpoint %s' % model_path)
+        saver.restore(sess, model_path)
+        previous_step = sess.run(global_step)
+        #for frame_idx in tqdm(range(0, NUM_TEST_SAMPLE)):
+
+    
+        pt = lidar_callback(data)
+        points = pt.copy()
+        ros_lidar = points
+        print(points)
+       
+        frame_idx = 0
         start_time = time.time()
         if VISUALIZATION_LEVEL == 2:
             pcd = open3d.PointCloud()
             line_set = open3d.LineSet()
             graph_line_set = open3d.LineSet()
-        # provide input ======================================================
-        cam_rgb_points = dataset.get_cam_points_in_image_with_rgb(frame_idx,
+    # provide input ======================================================
+    #cam_rgb_points = dataset.get_cam_points_in_image_with_rgb(frame_idx,
+    #    config['downsample_by_voxel_size'])
+    
+       
+        cam_rgb_points = dataset.ros_data_pre(frame_idx,ros_lidar,
             config['downsample_by_voxel_size'])
         calib = dataset.get_calib(frame_idx)
         image = dataset.get_image(frame_idx)
@@ -270,6 +343,7 @@ with tf.Session(graph=graph,
             label_map = {'Background': 0, 'Pedestrian': 1, 'Cyclist':3,
                 'DontCare': 5}
         # run forwarding =====================================================
+    
         feed_dict = {
             t_initial_vertex_features: input_v,
             t_is_training: True,
@@ -560,3 +634,5 @@ with tf.Session(graph=graph,
             + total_time - start_time
     for key in time_dict:
         print(key + " time : " + str(time_dict[key]/NUM_TEST_SAMPLE))
+lidar_sub = rospy.Subscriber("/points_raw", PointCloud2, callback,queue_size = 3000000000)
+rospy.spin()

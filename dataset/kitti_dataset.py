@@ -687,6 +687,77 @@ class KittiDataset(object):
         cam_points_in_img_with_rgb = self.rgb_to_cam_points(cam_points_in_img,
             image, calib)
         return cam_points_in_img_with_rgb
+#################################################################################
+    def ros_get_velo_points(self, frame_idx, ros_lidar,xyz_range=None):
+        """Load velo points from frame_idx.
+
+        Args:
+            frame_idx: the index of the frame to read.
+
+        Returns: Points.
+        """
+
+        point_file = join(self._point_dir, self._file_list[frame_idx])+'.bin'
+        #velo_data = np.fromfile(point_file, dtype=np.float32).reshape(-1, 4)
+        velo_data = ros_lidar
+        velo_points = velo_data[:,:3]
+        reflections = velo_data[:,[3]]
+        if xyz_range is not None:
+            x_range, y_range, z_range = xyz_range
+            mask =(
+                velo_points[:, 0] > x_range[0])*(velo_points[:, 0] < x_range[1])
+            mask *=(
+                velo_points[:, 1] > y_range[0])*(velo_points[:, 1] < y_range[1])
+            mask *=(
+                velo_points[:, 2] > z_range[0])*(velo_points[:, 2] < z_range[1])
+            return Points(xyz = velo_points[mask], attr = reflections[mask])
+        return Points(xyz = velo_points, attr = reflections)
+    def ros_get_cam_points(self, frame_idx,ros_lidar,
+            downsample_voxel_size=None, calib=None, xyz_range=None):
+            """Load velo points and convert them to camera coordinates.
+
+            Args:
+                frame_idx: the index of the frame to read.
+
+            Returns: Points.
+            """
+            velo_points = self.ros_get_velo_points(frame_idx,ros_lidar, xyz_range=xyz_range)
+            print('velo_points = {}'.format(velo_points))
+            if calib is None:
+                calib = self.get_calib(frame_idx)
+            cam_points = self.velo_points_to_cam(velo_points, calib)
+            if downsample_voxel_size is not None:
+                cam_points = downsample_by_average_voxel(cam_points,
+                    downsample_voxel_size)
+            return cam_points
+    def ros_data_pre(self, frame_idx,ros_lidar,
+        downsample_voxel_size=None, calib=None, xyz_range=None):
+        """Get camera points that are visible in image and append image color
+        to the points as attributes."""
+        
+
+        if calib is None:
+            calib = self.get_calib(frame_idx)
+        cam_points = self.ros_get_cam_points(frame_idx,ros_lidar, downsample_voxel_size,
+            calib = calib, xyz_range=xyz_range)
+        front_cam_points_idx = cam_points.xyz[:,2] > 0.1
+        front_cam_points = Points(cam_points.xyz[front_cam_points_idx, :],
+            cam_points.attr[front_cam_points_idx, :])
+        image = self.get_image(frame_idx)
+        height = image.shape[0]
+        width = image.shape[1]
+        img_points = self.cam_points_to_image(front_cam_points, calib)
+        img_points_in_image_idx = np.logical_and.reduce(
+            [img_points.xyz[:,0]>0, img_points.xyz[:,0]<width,
+             img_points.xyz[:,1]>0, img_points.xyz[:,1]<height])
+        cam_points_in_img = Points(
+            xyz = front_cam_points.xyz[img_points_in_image_idx,:],
+            attr = front_cam_points.attr[img_points_in_image_idx,:])
+        cam_points_in_img_with_rgb = self.rgb_to_cam_points(cam_points_in_img,
+            image, calib)
+        return cam_points_in_img_with_rgb
+
+#############################################################
 
     def get_image(self, frame_idx):
         """Load the image from frame_idx.
