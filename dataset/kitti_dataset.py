@@ -10,6 +10,7 @@ from collections import namedtuple, defaultdict
 import numpy as np
 import open3d
 import cv2
+import math
 
 Points = namedtuple('Points', ['xyz', 'attr'])
 
@@ -702,6 +703,8 @@ class KittiDataset(object):
         velo_data = ros_lidar
         velo_points = velo_data[:,:3]
         reflections = velo_data[:,[3]]
+        max_r = np.amax(reflections) 
+        print('max_r = {}'.format(max_r))
         if xyz_range is not None:
             x_range, y_range, z_range = xyz_range
             mask =(
@@ -1098,6 +1101,48 @@ class KittiDataset(object):
         cam_xyz1 = np.hstack([points.xyz, np.ones([points.xyz.shape[0],1])])
         velo_xyz = np.matmul(cam_xyz1, np.transpose(calib['cam_to_velo']))[:,:3]
         return Points(xyz = velo_xyz, attr = points.attr)
+    def eulerAnglesToRotationMatrix(self,theta) :
+
+            R_x = np.array([[1,         0,                  0                   ],
+                            [0,         math.cos(theta[0]), -math.sin(theta[0]) ],
+                            [0,         math.sin(theta[0]), math.cos(theta[0])  ]
+                            ])
+                
+                
+                            
+            R_y = np.array([[math.cos(theta[1]),    0,      math.sin(theta[1])  ],
+                            [0,                     1,      0                   ],
+                            [-math.sin(theta[1]),   0,      math.cos(theta[1])  ]
+                            ])
+                        
+            R_z = np.array([[math.cos(theta[2]),    -math.sin(theta[2]),    0],
+                            [math.sin(theta[2]),    math.cos(theta[2]),     0],
+                            [0,                     0,                      1]
+                            ])
+                            
+                            
+            R = np.dot(R_z, np.dot( R_y, R_x ))
+
+            return R
+    def cam_points_to_velo_array(self, all_bbox, calib):
+        """Convert points from camera coordinates to velodyne coordinates.
+
+        Args:
+            points: a [N, 3] float32 numpy array.
+
+        Returns: a [N, 3] float32 numpy array.
+        """
+        velo_xyz_array = []
+        for i ,bbox in enumerate(all_bbox):
+            cam_xyz1 = np.hstack([bbox, np.ones([bbox.shape[0],1])])
+
+        #cam_xyz1 = np.hstack([points.xyz, np.ones([points.xyz.shape[0],1])])
+            velo_xyz = np.matmul(cam_xyz1, np.transpose(calib['cam_to_velo']))[:,:3]
+            velo_xyz_array.append(velo_xyz)
+
+        velo_xyz_array = np.array(velo_xyz_array)
+        return velo_xyz_array
+        #return Points(xyz = velo_xyz, attr = points.attr)
 
     def cam_to_velo(self, points_xyz, calib):
         cam_xyz1 = np.hstack([points_xyz, np.ones([points_xyz.shape[0],1])])

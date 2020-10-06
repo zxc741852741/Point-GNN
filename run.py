@@ -22,6 +22,17 @@ from models import nms
 from util.config_util import load_config, load_train_config
 from util.summary_util import write_summary_scale
 
+
+
+
+import rospy
+from sensor_msgs.msg import Image , PointCloud2 , PointField
+from visualization_msgs.msg import Marker ,MarkerArray 
+from geometry_msgs.msg import Point
+import sensor_msgs.point_cloud2 as pcl2 
+from std_msgs.msg import Header
+import math
+
 parser = argparse.ArgumentParser(description='Point-GNN inference on KITTI')
 parser.add_argument('checkpoint_path', type=str,
                    help='Path to checkpoint')
@@ -78,6 +89,8 @@ import sensor_msgs.point_cloud2 as pcl2
 sys.path.insert(0,'/home/user/anaconda3/lib/python3.7/site-packages/')  
 import ros_numpy
 import math
+
+
 def lidar_callback(data):
     pc = ros_numpy.numpify(data)
     #print(pc)
@@ -232,48 +245,48 @@ saver = tf.train.Saver()
 graph = tf.get_default_graph()
 gpu_options = tf.GPUOptions(allow_growth=True)
 
-
+# setup Visualizer ============================================================
+if VISUALIZATION_LEVEL == 1:
+    print("Configure the viewpoint as you want and press [q]")
+    calib = dataset.get_calib(0)
+    cam_points_in_img_with_rgb = dataset.get_cam_points_in_image_with_rgb(0,
+        calib=calib)
+    vis = open3d.Visualizer()
+    vis.create_window()
+    pcd = open3d.PointCloud()
+    pcd.points = open3d.Vector3dVector(cam_points_in_img_with_rgb.xyz)
+    pcd.colors = open3d.Vector3dVector(cam_points_in_img_with_rgb.attr[:,1:4])
+    line_set = open3d.LineSet()
+    graph_line_set = open3d.LineSet()
+    box_corners = np.array([[0, 0, 0]])
+    box_edges = np.array([[0,0]])
+    line_set.points = open3d.Vector3dVector(box_corners)
+    line_set.lines = open3d.Vector2iVector(box_edges)
+    graph_line_set.points = open3d.Vector3dVector(box_corners)
+    graph_line_set.lines = open3d.Vector2iVector(box_edges)
+    vis.add_geometry(pcd)
+    vis.add_geometry(line_set)
+    vis.add_geometry(graph_line_set)
+    ctr = vis.get_view_control()
+    ctr.rotate(0.0, 3141.0, 0)
+    vis.run()
+color_map = np.array([(211,211,211), (255, 0, 0), (255,20,147), (65, 244, 101),
+    (169, 244, 65), (65, 79, 244), (65, 181, 244), (229, 244, 66)],
+    dtype=np.float32)
+color_map = color_map/255.0
+gt_color_map = {
+    'Pedestrian': (0,255,255),
+    'Person_sitting': (218,112,214),
+    'Car': (154,205,50),
+    'Truck':(255,215,0),
+    'Van': (255,20,147),
+    'Tram': (250,128,114),
+    'Misc': (128,0,128),
+    'Cyclist': (255,165,0),
+}
+#global theta
 rospy.init_node('listener', anonymous=True)
 def callback(data):
-    # setup Visualizer ============================================================
-    if VISUALIZATION_LEVEL == 1:
-        print("Configure the viewpoint as you want and press [q]")
-        calib = dataset.get_calib(0)
-        cam_points_in_img_with_rgb = dataset.get_cam_points_in_image_with_rgb(0,
-            calib=calib)
-        vis = open3d.Visualizer()
-        vis.create_window()
-        pcd = open3d.PointCloud()
-        pcd.points = open3d.Vector3dVector(cam_points_in_img_with_rgb.xyz)
-        pcd.colors = open3d.Vector3dVector(cam_points_in_img_with_rgb.attr[:,1:4])
-        line_set = open3d.LineSet()
-        graph_line_set = open3d.LineSet()
-        box_corners = np.array([[0, 0, 0]])
-        box_edges = np.array([[0,0]])
-        line_set.points = open3d.Vector3dVector(box_corners)
-        line_set.lines = open3d.Vector2iVector(box_edges)
-        graph_line_set.points = open3d.Vector3dVector(box_corners)
-        graph_line_set.lines = open3d.Vector2iVector(box_edges)
-        vis.add_geometry(pcd)
-        vis.add_geometry(line_set)
-        vis.add_geometry(graph_line_set)
-        ctr = vis.get_view_control()
-        ctr.rotate(0.0, 3141.0, 0)
-        vis.run()
-    color_map = np.array([(211,211,211), (255, 0, 0), (255,20,147), (65, 244, 101),
-        (169, 244, 65), (65, 79, 244), (65, 181, 244), (229, 244, 66)],
-        dtype=np.float32)
-    color_map = color_map/255.0
-    gt_color_map = {
-        'Pedestrian': (0,255,255),
-        'Person_sitting': (218,112,214),
-        'Car': (154,205,50),
-        'Truck':(255,215,0),
-        'Van': (255,20,147),
-        'Tram': (250,128,114),
-        'Misc': (128,0,128),
-        'Cyclist': (255,165,0),
-    }
     with tf.Session(graph=graph,
         config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         sess.run(tf.variables_initializer(tf.global_variables()))
@@ -284,11 +297,11 @@ def callback(data):
         previous_step = sess.run(global_step)
         #for frame_idx in tqdm(range(0, NUM_TEST_SAMPLE)):
 
-    
+        #global theta
         pt = lidar_callback(data)
         points = pt.copy()
         ros_lidar = points
-        print(points)
+        #print(points)
        
         frame_idx = 0
         start_time = time.time()
@@ -299,17 +312,34 @@ def callback(data):
     # provide input ======================================================
     #cam_rgb_points = dataset.get_cam_points_in_image_with_rgb(frame_idx,
     #    config['downsample_by_voxel_size'])
-    
-       
-        cam_rgb_points = dataset.ros_data_pre(frame_idx,ros_lidar,
-            config['downsample_by_voxel_size'])
         calib = dataset.get_calib(frame_idx)
+        
+
+        theta = -90 * math.pi/180
+        print('theta = {}'.format(theta))       
+        modify_calib_R = dataset.eulerAnglesToRotationMatrix([0,0,theta])
+        print('calib_velo_to_cam_1 = {}'.format(calib['velo_to_cam']))
+        v_to_c = calib['velo_to_cam'].copy()
+        calib_rotation = calib['velo_to_cam'][:3,:3].copy()        
+        v_to_c[:3,:3] = calib_rotation.dot(modify_calib_R)
+        #calib['velo_to_cam'] = np.concatenate((modify_calib_R.dot(calib['velo_to_cam'][:3,:3]),v_to_c[:,])),axis=0)
+        calib['velo_to_cam'] = v_to_c.copy()
+        print('calib_velo_to_cam_2 = {}'.format(calib['velo_to_cam']))
+
+        cam_rgb_points = dataset.ros_data_pre(frame_idx,ros_lidar,
+            config['downsample_by_voxel_size'],calib)
+        '''in_modify_calib_R = dataset.eulerAnglesToRotationMatrix([-theta,0,0])
+        c_to_v = calib['cam_to_velo'].copy()
+        c_to_v[:3,:3] = calib['cam_to_velo'][:3,:3].dot(in_modify_calib_R)
+        calib['cam_to_velo'] = c_to_v.copy()'''
+
+
         image = dataset.get_image(frame_idx)
         if not IS_TEST:
             box_label_list = dataset.get_label(frame_idx)
         input_time = time.time()
         time_dict['fetch input'] = time_dict.get('fetch input', 0) \
-            + input_time - start_time
+            + input_time - start_time 
         graph_generate_fn= get_graph_generate_fn(config['graph_gen_method'])
         (vertex_coord_list, keypoint_indices_list, edges_list) = \
             graph_generate_fn(
@@ -353,7 +383,7 @@ def callback(data):
             dict(zip(t_keypoint_indices_list, keypoint_indices_list)))
         feed_dict.update(dict(zip(t_vertex_coord_list, vertex_coord_list)))
         results = sess.run(fetches, feed_dict=feed_dict)
-        print('results = {}'.format(results))
+        #print('results = {}'.format(results))
         gnn_time = time.time()
         time_dict['gnn inference'] = time_dict.get('gnn inference', 0) \
             + gnn_time - graph_time
@@ -457,6 +487,8 @@ def callback(data):
             detection_boxes_3d_corners = nms.boxes_3d_to_corners(
                 detection_boxes_3d)
             pred_labels = []
+
+            #print('detection_boxes_3d_corners = {}'.format(detection_boxes_3d_corners))
             for i in range(len(detection_boxes_3d_corners)):
                 detection_box_3d_corners = detection_boxes_3d_corners[i]
                 corners_cam_points = Points(
@@ -596,8 +628,8 @@ def callback(data):
                 f.write('\n')
 
         if VISUALIZATION_LEVEL > 0:
-            cv2.imshow('image', image)
-            cv2.waitKey(10)
+            #cv2.imshow('image', image)
+            #cv2.waitKey(10)
             if not IS_TEST:
                 box_edges += gt_box_corners.shape[0]
                 line_set.points = open3d.Vector3dVector(np.vstack(
@@ -614,9 +646,10 @@ def callback(data):
                 line_set.colors = open3d.Vector3dVector(np.vstack(
                     [box_colors]))
         if VISUALIZATION_LEVEL == 1:
-            vis.update_geometry()
+            #vis.destroy_window()
+            '''vis.update_geometry()
             vis.poll_events()
-            vis.update_renderer()
+            vis.update_renderer()'''
         if VISUALIZATION_LEVEL == 2:
             print("Configure the viewpoint as you want and press [q]")
             def custom_draw_geometry_load_option(geometry_list):
@@ -632,7 +665,127 @@ def callback(data):
         total_time = time.time()
         time_dict['total'] = time_dict.get('total', 0) \
             + total_time - start_time
-    for key in time_dict:
-        print(key + " time : " + str(time_dict[key]/NUM_TEST_SAMPLE))
-lidar_sub = rospy.Subscriber("/points_raw", PointCloud2, callback,queue_size = 3000000000)
+
+        #cam_rgb_points
+        print('cam_rgb_points.attr[:,0] = {}'.format(cam_rgb_points.attr[:,[0]]))
+    cam_rgb_points = dataset.cam_points_to_velo(cam_rgb_points,calib)
+    pub_points =  np.concatenate((cam_rgb_points.xyz, cam_rgb_points.attr[:,[0]]), axis=1)
+
+
+
+    #print('cam_rgb_points = {}'.format(pub_points))
+    
+    #print('new_detection_boxes_3d_corners = {}'.format(detection_boxes_3d_corners))
+    def publish_3dbox(box3d_pub, corners_3d_velos,types,__FRAME_ID__='/nuscenes_lidar'):
+        marker_array = MarkerArray()
+        #list(types)
+        header = Header()
+        header.stamp = rospy.Time.now()
+        model_name = 'graph'
+        if model_name == 'PVRCNN':
+            DETECTION_COLOR_DICT = {'truck':(160,32,240) , 'barrier':(255,30,0),'motorcycle':(0,255,0),'car':(0,0,255) , 'pedestrian':(255,0,255),'trailer':(255,255,255),'bus':(0,255,255),'bicycle':(255,153,18),'traffic_cone':(56,94,15),'construction_vehicle':(160,32,240),'Car':(0,0,255),'Cyclist':(0,255,0),'Pedestrian':(255,0,255)}
+        else:
+            DETECTION_COLOR_DICT = {'truck':(160,32,240) , 'barrier':(255,30,0),'motorcycle':(0,255,0),'car':(0,0,255) , 'pedestrian':(255,0,255),'trailer':(255,255,255),'bus':(0,255,255),'bicycle':(255,153,18),'traffic_cone':(56,94,15),'construction_vehicle':(160,32,240),'Car':(0,0,255),'Cyclist':(0,255,0),'Pedestrian':(255,0,255)}
+        #DETECTION_COLOR_DICT = {'1':(255,0,0) , '2':(255,30,0),'3':(0,255,0),'4':(0,0,255) , '5':(255,0,255),'6':(255,255,255),'0':(0,255,255),'7':(255,153,18),'8':(56,94,15),'9':(160,32,240)}
+        LINES = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[4,0],[5,1],[6,2],[7,3]]#,[4,1],[5,0]]
+        LIFETIME = 0.3
+        FRAME_ID = '/nuscenes_lidar'
+        FRAME_ID = __FRAME_ID__
+        for i, corners_3d_velo in enumerate(corners_3d_velos):
+            corners_3d_velo = corners_3d_velo.T
+            marker = Marker()
+            marker.header.frame_id = FRAME_ID
+            marker.header.stamp = rospy.Time.now()
+            #a = types[i]
+            #a = 1
+            a = 'car'
+            marker.id = i
+
+            #marker.ns = types[i]
+            '''if types[i] == 'car':
+                marker.ns = 'car'
+            if types[i] != 'car':
+                marker.ns = "others"'''
+            '''marker.ns = "small vehicles"
+            marker.ns = "big vehicles"
+            marker.ns = "pedestrian"
+            marker.ns = "motorcyclist and bicyclist"
+            marker.ns = "traffic cones"'''
+            
+            marker.action = Marker.ADD
+            marker.lifetime = rospy.Duration(LIFETIME)
+            marker.type = Marker.LINE_LIST
+            
+            r,g,b = DETECTION_COLOR_DICT[str(a)]
+            marker.color.r = r/255.0
+            marker.color.g = g/255.0
+            marker.color.b = b/255.0
+
+            marker.color.a = 1.0
+            
+            marker.scale.x = 0.15
+
+            marker.points = []
+            #print(corners_3d_velo[0][1])
+            '''for l in LINES:
+                p1 = corners_3d_velo[l[0]]
+                marker.points.append(Point(p1[0],p1[1],p1[2]))
+                print(p1)
+                p2 = corners_3d_velo[l[1]]
+                marker.points.append(Point(p2[0],p2[1],p2[2]))'''
+            
+            for l in LINES:
+                p1x = corners_3d_velo[0][l[0]]
+                p1y = corners_3d_velo[1][l[0]]
+                p1z = corners_3d_velo[2][l[0]]
+                marker.points.append(Point(p1x,p1y,p1z))
+                p2x = corners_3d_velo[0][l[1]]
+                p2y = corners_3d_velo[1][l[1]]
+                p2z = corners_3d_velo[2][l[1]]
+                marker.points.append(Point(p2x,p2y,p2z))
+            #print(marker)
+            marker_array.markers.append(marker)
+        box3d_pub.publish(marker_array)
+    def publish_point_cloud(pcl_pub,point_cloud):
+        FRAME_ID = '/nuscenes_lidar'
+        header = Header()
+        header.stamp = rospy.Time.now()
+        header.frame_id = FRAME_ID
+        #pcl_pub.publish(pcl2.create_cloud_xyz32(header,point_cloud[:, :3]))
+        #print('intensity = {}'.format(point_cloud[:,3]))
+        #new_intensity = []
+        #pc_intensity = point_cloud[0][:,3]
+        #new_pc_intensity = pc_intensity*255
+        '''for j in pc_intensity:
+            #a = struct.pack('i', j)
+            a = j*255
+            new_pc_intensity.append(a)
+        new_pc_intensity = np.array(new_pc_intensity)'''
+
+        #point_cloud[0][:,3] = new_pc_intensity
+        fields = [PointField('x', 0, PointField.FLOAT32, 1),
+            PointField('y', 4, PointField.FLOAT32, 1),
+            PointField('z', 8, PointField.FLOAT32, 1),
+            #PointField('rgb', 12, PointField.UINT32, 1),
+            #PointField('rgba', 12, PointField.FLOAT32, 1),
+            ]
+    
+        #print('point_cloud = {}'.format(point_cloud[0]))
+        #print(type(point_cloud[0]))
+        pcl_pub.publish(pcl2.create_cloud(header,fields,point_cloud[:,:3]))
+    types = np.ones(100)
+    box3d_pub = rospy.Publisher('nuscenes_lidar_label', MarkerArray, queue_size=100000000000)
+    pcl_pub = rospy.Publisher('/pointcloud',PointCloud2,queue_size=10000000000000)
+    #print('detection_boxes_3d_corners = {}'.format(detection_boxes_3d_corners))
+    #print('pub_points = {}'.format(pub_points))
+    publish_point_cloud(pcl_pub,pub_points)
+    
+    #publish_point_cloud(pcl_pub,pt)
+    #if len(detection_boxes_3d_corners) != 0:
+    if box_indices.size != 0:
+        detection_boxes_3d_corners = dataset.cam_points_to_velo_array(detection_boxes_3d_corners,calib)
+        publish_3dbox(box3d_pub, detection_boxes_3d_corners,types)
+    
+    print('------------------------------------------------LL')
+lidar_sub = rospy.Subscriber("/nuscenes_lidar", PointCloud2, callback,queue_size = 300000000000000000000000)
 rospy.spin()
