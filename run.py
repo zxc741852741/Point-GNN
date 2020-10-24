@@ -285,6 +285,42 @@ gt_color_map = {
     'Cyclist': (255,165,0),
 }
 #global theta
+def publish_edges(edge_pub, corners_3d_velos,types):
+    marker_array = MarkerArray()
+    for i, corners_3d_velo in enumerate(corners_3d_velos):
+        marker = Marker()
+        marker.header.frame_id = FRAME_ID
+        marker.header.stamp = rospy.Time.now()
+        a = types[i]
+        #a = 1
+        marker.id = i
+        marker.action = Marker.ADD
+        marker.lifetime = rospy.Duration(LIFETIME)
+        marker.type = Marker.LINE_LIST
+         
+        r,g,b = DETECTION_COLOR_DICT[str(a)]
+        marker.color.r = r/255.0
+        marker.color.g = g/255.0
+        marker.color.b = b/255.0
+
+        marker.color.a = 1.0
+        
+        marker.scale.x = 0.15
+
+        marker.points = []
+        
+        for l in LINES:
+            p1x = corners_3d_velo[0][l[0]]
+            p1y = corners_3d_velo[1][l[0]]
+            p1z = corners_3d_velo[2][l[0]]
+            marker.points.append(Point(p1x,p1y,p1z))
+            p2x = corners_3d_velo[0][l[1]]
+            p2y = corners_3d_velo[1][l[1]]
+            p2z = corners_3d_velo[2][l[1]]
+            marker.points.append(Point(p2x,p2y,p2z))
+        #print(marker)
+        marker_array.markers.append(marker)
+    box3d_pub.publish(marker_array)
 rospy.init_node('listener', anonymous=True)
 def callback(data):
     with tf.Session(graph=graph,
@@ -358,6 +394,8 @@ def callback(data):
             input_v = np.hstack([cam_rgb_points.attr[:, [0]], np.zeros(
                 (cam_rgb_points.attr.shape[0], 3))])
         elif config['input_features'] == 'i':
+            print('input_v = {}'.format(cam_rgb_points))
+            print('dlksdlkdslkvslkdv')
             input_v = cam_rgb_points.attr[:, [0]]
         elif config['input_features'] == '0':
             input_v = np.zeros((cam_rgb_points.attr.shape[0], 1))
@@ -450,7 +488,45 @@ def callback(data):
                     appr_factor=100.0, top_k=-1,
                     attributes=np.arange(len(box_indices)))
             box_probs = detection_scores
+            #------------------------------------------
+            last_layer_points_color = np.zeros(
+                    (last_layer_points_xyz.shape[0], 3), dtype=np.float32)
+            last_layer_points_color[:, :] =  color_map[raw_box_labels, :]
+            cam_points_color = cam_rgb_points.attr[:, 1:]
+            pointsss = open3d.Vector3dVector(np.vstack(
+                [last_layer_points_xyz[box_indices][nms_indices],
+                last_layer_points_xyz, cam_rgb_points.xyz]))
+            np_pointss = np.asarray(pointsss)
+
+            print('np_pointss = {}'.format(np_pointss))
+            '''pcd.points = open3d.Vector3dVector(np.vstack(
+                [last_layer_points_xyz[box_indices][nms_indices],
+                last_layer_points_xyz, cam_rgb_points.xyz]))
+            pcd.colors = open3d.Vector3dVector(np.vstack(
+                [last_layer_points_color[box_indices][nms_indices],
+                np.tile([(1,0.,200./255)],
+                    (last_layer_points_color.shape[0], 1)),
+                cam_points_color]))'''
+            output_points_idx = box_indices[nms_indices]//NUM_CLASSES
+            edge_mask = np.isin(
+                edges_list[last_layer_graph_level][:, 1],
+                output_points_idx)
+            last_layer_edges = np.hstack(
+                [edges_list[last_layer_graph_level][:, [0]][edge_mask],
+                keypoint_indices_list[-1][edges_list[
+                last_layer_graph_level][:, 1][edge_mask]]])
+            colors = last_layer_points_color[edges_list[
+                last_layer_graph_level][:, 1][edge_mask]]
+            for i in range(len(keypoint_indices_list)-2, -1, -1):
+                last_layer_edges = \
+                    keypoint_indices_list[i][last_layer_edges, 0]
+            last_layer_edges += len(box_indices[nms_indices])
+            last_layer_edges += last_layer_points_xyz.shape[0]
+            lines = last_layer_edges
+            print('lines = {}'.format(lines))
+            #----------------------------------------------
             # visualization ===================================================
+
             if VISUALIZATION_LEVEL > 0:
                 last_layer_points_color = np.zeros(
                     (last_layer_points_xyz.shape[0], 3), dtype=np.float32)
@@ -688,7 +764,7 @@ def callback(data):
             DETECTION_COLOR_DICT = {'truck':(160,32,240) , 'barrier':(255,30,0),'motorcycle':(0,255,0),'car':(0,0,255) , 'pedestrian':(255,0,255),'trailer':(255,255,255),'bus':(0,255,255),'bicycle':(255,153,18),'traffic_cone':(56,94,15),'construction_vehicle':(160,32,240),'Car':(0,0,255),'Cyclist':(0,255,0),'Pedestrian':(255,0,255)}
         #DETECTION_COLOR_DICT = {'1':(255,0,0) , '2':(255,30,0),'3':(0,255,0),'4':(0,0,255) , '5':(255,0,255),'6':(255,255,255),'0':(0,255,255),'7':(255,153,18),'8':(56,94,15),'9':(160,32,240)}
         LINES = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[4,0],[5,1],[6,2],[7,3]]#,[4,1],[5,0]]
-        LIFETIME = 0.3
+        LIFETIME = 1.07
         FRAME_ID = '/nuscenes_lidar'
         FRAME_ID = __FRAME_ID__
         for i, corners_3d_velo in enumerate(corners_3d_velos):
@@ -767,15 +843,16 @@ def callback(data):
             PointField('y', 4, PointField.FLOAT32, 1),
             PointField('z', 8, PointField.FLOAT32, 1),
             #PointField('rgb', 12, PointField.UINT32, 1),
-            #PointField('rgba', 12, PointField.FLOAT32, 1),
+            PointField('rgba', 12, PointField.FLOAT32, 1),
             ]
     
         #print('point_cloud = {}'.format(point_cloud[0]))
         #print(type(point_cloud[0]))
-        pcl_pub.publish(pcl2.create_cloud(header,fields,point_cloud[:,:3]))
+        pcl_pub.publish(pcl2.create_cloud(header,fields,point_cloud[:,:4]))
     types = np.ones(100)
     box3d_pub = rospy.Publisher('nuscenes_lidar_label', MarkerArray, queue_size=100000000000)
     pcl_pub = rospy.Publisher('/pointcloud',PointCloud2,queue_size=10000000000000)
+    edge_pub = rospy.Publisher('/edges', MarkerArray, queue_size=100000000000)
     #print('detection_boxes_3d_corners = {}'.format(detection_boxes_3d_corners))
     #print('pub_points = {}'.format(pub_points))
     publish_point_cloud(pcl_pub,pub_points)
@@ -787,5 +864,5 @@ def callback(data):
         publish_3dbox(box3d_pub, detection_boxes_3d_corners,types)
     
     print('------------------------------------------------LL')
-lidar_sub = rospy.Subscriber("/nuscenes_lidar", PointCloud2, callback,queue_size = 300000000000000000000000)
+lidar_sub = rospy.Subscriber("/points_raw", PointCloud2, callback,queue_size = 300000000000000000000000)
 rospy.spin()

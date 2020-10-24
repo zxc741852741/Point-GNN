@@ -743,7 +743,10 @@ class KittiDataset(object):
             calib = self.get_calib(frame_idx)
         cam_points = self.ros_get_cam_points(frame_idx,ros_lidar, downsample_voxel_size,
             calib = calib, xyz_range=xyz_range)
-        front_cam_points_idx = cam_points.xyz[:,2] > 0.1
+        '''all_lidar_points = Points(
+            xyz = ros_lidar[:,:3],
+            attr = ros_lidar[:,[3]])'''
+        '''front_cam_points_idx = cam_points.xyz[:,2] > 0.1
         front_cam_points = Points(cam_points.xyz[front_cam_points_idx, :],
             cam_points.attr[front_cam_points_idx, :])
         image = self.get_image(frame_idx)
@@ -758,7 +761,8 @@ class KittiDataset(object):
             attr = front_cam_points.attr[img_points_in_image_idx,:])
         cam_points_in_img_with_rgb = self.rgb_to_cam_points(cam_points_in_img,
             image, calib)
-        return cam_points_in_img_with_rgb
+        return cam_points_in_img_with_rgb'''
+        return cam_points
 
 #############################################################
 

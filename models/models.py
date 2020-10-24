@@ -116,7 +116,7 @@ class MultiLayerFastLocalGraphModelV2(object):
                 tfeatures_list = []
                 tfeatures = t_initial_vertex_features
                 tfeatures_list.append(tfeatures)
-                for idx in range(len(self._layer_configs)-1):
+                for idx in range(len(self._layer_configs)-3):
                     layer_config = self._layer_configs[idx]
                     layer_scope = layer_config['scope']
                     layer_type = layer_config['type']
