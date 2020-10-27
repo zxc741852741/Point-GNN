@@ -1,5 +1,5 @@
 {
-    "NUM_GPU": 1
+    "NUM_GPU": 1,
     "NUM_TEST_SAMPLE": 3260,
     "batch_size": 1,
     "capacity": 1,
