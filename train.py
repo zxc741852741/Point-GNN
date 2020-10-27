@@ -22,6 +22,8 @@ from util.config_util import save_config, save_train_config, \
     load_train_config, load_config
 from util.summary_util import write_summary_scale
 
+import matplotlib.pyplot as plt
+
 parser = argparse.ArgumentParser(description='Training of PointGNN')
 parser.add_argument('train_config_path', type=str,
                    help='Path to train_config')
@@ -505,6 +507,15 @@ else:
             per_process_gpu_memory_fraction=train_config['gpu_memusage'])
 batch_ctr = 0
 batch_gradient_list = []
+
+loss_list = []
+epoch_list = []
+
+#import sys 
+continue_train = 1
+log_path = os.path.join(train_config['train_dir'],'log.txt')
+
+
 with tf.Session(graph=graph,
     config=tf.ConfigProto(
     allow_soft_placement=True, gpu_options=gpu_options,)) as sess:
@@ -597,6 +608,24 @@ with tf.Session(graph=graph,
         print('cls:%f, loc:%f, reg:%f, loss: %f'
             % (results['cls_loss'], results['loc_loss'], results['reg_loss'],
             results['total_loss']))
+
+        loss_list.append(results['total_loss'])
+        #epoch_list.append(epoch_idx)
+        print('epoch_idx = {}'.format(epoch_idx))
+        epoch_list = np.arange(epoch_idx+1)
+        plt.plot(epoch_list,loss_list)
+        plt.xlabel("epoch")
+        plt.ylabel("total loss")
+        plt.title("Loss")
+        plt.savefig(os.path.join(train_config['train_dir'],'loss.png'),format="png")
+
+        with open(log_path,'a') as f:
+            f.write('STEP: {}, epoch_idx: {}, lr: {}\n'.format(results['step'], epoch_idx, results['learning_rate']))
+            #% (results['step'], epoch_idx, results['learning_rate']))
+            f.write('cls:{}, loc:{}, reg:{}, loss: {}\n'.format(results['cls_loss'], results['loc_loss'], results['reg_loss'],
+            results['total_loss']))
+            #% (results['cls_loss'], results['loc_loss'], results['reg_loss'],
+            #results['total_loss']) )
         for class_idx in range(NUM_CLASSES):
             print('Class_%d: recall=%f, prec=%f, mAP=%f, loc=%f'
                 % (class_idx,
