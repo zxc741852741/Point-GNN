@@ -5,6 +5,7 @@ from functools import partial
 import tensorflow as tf
 import numpy as np
 import tensorflow.contrib.slim as slim
+import sys
 
 def instance_normalization(features):
     with tf.variable_scope(None, default_name='IN'):
@@ -224,6 +225,8 @@ class PointSetPooling(object):
         point_coordinates,
         keypoint_indices,
         set_indices,
+        edgetozero,                                                                   ## add change
+        t_num_group,
         point_MLP_depth_list=None,
         point_MLP_normalization_type='fused_BN_center',
         point_MLP_activation_type = 'ReLU',
@@ -265,6 +268,7 @@ class PointSetPooling(object):
             point_set_coordinates - point_set_keypoint_coordinates
         point_set_features = tf.concat(
             [point_set_features, point_set_coordinates], axis=-1)
+        print('point_set_features = {}'.format(point_set_features))
         with tf.variable_scope('extract_vertex_features'):
             # Step 1: Extract all vertex_features
             extracted_point_features = self._point_feature_fn(
@@ -281,7 +285,339 @@ class PointSetPooling(object):
                 normalization_type=output_MLP_normalization_type,
                 activation_type=output_MLP_activation_type)
         return set_features
+def attention_v2(edge_features,edges,t_num_group):
+    def get_duplicated(tensor):
+        unique_a_vals, unique_idx = tf.unique(tensor)
+        #init = tf.initialize_all_variables() 
+        count_a_unique = tf.unsorted_segment_sum(tf.ones_like(tensor),unique_idx,tf.shape(tensor)[0])                   
+        #more_than_one = tf.greater(count_a_unique, 1)                               
+        #more_than_one_idx = tf.squeeze(tf.where(more_than_one))                     
+        #more_than_one_vals = tf.squeeze(tf.gather(unique_a_vals, more_than_one_idx)) #[not_duplicated, _] 
+        not_duplicated,_= tf.raw_ops.ListDiff(x = tensor, y = unique_a_vals, out_idx=tf.dtypes.int32, name=None)                
+        dups_in_a, indexes_in_a = tf.raw_ops.ListDiff(x = tensor, y =not_duplicated,out_idx=tf.dtypes.int32, name=None)
+        return dups_in_a, indexes_in_a
+    with tf.device("/cpu:0"):
+    #aaa=1
+    #if aaa ==1:
+        with tf.variable_scope('attention', reuse=tf.AUTO_REUSE):
+        #if aaa==1:
+            #for i,local_edge_features in enumerate(dd):
+            #reshaped_o = tf.reshape(tf.cast(local_edge_features, tf.uint8), [-1, 1, 1])
+            #not_empty_ops.append(tf.logical_or(i>max_idx, tf.size(reshaped_o)>0))
+            #png_output = tf.cond(tf.size(reshaped_o)>0, lambda : att(local_edge_features), lambda: 1.0)
+            #print(tf.shape(png_output))
+            #print(type(png_output))
+            #att(local_edge_features)
+            #print(i)
+            #local_edge_features = tf.gather(edge_features,idx_list)
+            '''Q = slim.fully_connected(edge_features, 300,
+                activation_fn=None,
+                normalizer_fn=None)
+            K = slim.fully_connected(edge_features, 300,
+                activation_fn=None,
+                normalizer_fn=None)
+            V = slim.fully_connected(edge_features, 300,
+                activation_fn=None,
+                normalizer_fn=None)'''
+            #output = tf.keras.layers.Attention()([Q, K,V])
 
+            #return output
+            '''denominator = tf.sqrt(tf.cast(tf.shape(Q)[0],tf.float32), name=None) 
+            molecular = tf.tensordot(Q,tf.transpose(K),axes = 1)
+            QK = molecular/denominator
+            alphas = tf.nn.softmax(QK, name='alphas')    
+            output = tf.tensordot(alphas,V,axes=1)
+            print('output = {}'.format(output))
+            print(type(output))
+            return output'''
+
+            Q = tf.layers.dense(edge_features, 300, use_bias=True) # (N, T_q, d_model)
+            K = tf.layers.dense(edge_features,  300, use_bias=True) # (N, T_k, d_model)
+            V = tf.layers.dense(edge_features, 300, use_bias=True) # (N, T_k, d_model)
+            #tf.cast(x, dtype)
+            a = edges[:, 1]
+            dups_in_a, indexes_in_a = get_duplicated(a)
+            break_point = tf.unsorted_segment_sum(tf.ones_like(a),                   
+                                                 a,                        
+                                                 tf.shape(a)[0])
+            '''dups_in_Q, indexes_in_Q = get_duplicated(Q)
+            break_point_Q = tf.unsorted_segment_sum(tf.ones_like(Q),                   
+                                                 Q,                        
+                                                 tf.shape(Q)[0])'''
+            '''dups_in_K, indexes_in_K = get_duplicated(K)
+            break_point_K = tf.unsorted_segment_sum(tf.ones_like(K),                   
+                                                 K,                        
+                                                 tf.shape(K)[0])
+            dups_in_V, indexes_in_V = get_duplicated(V)
+            break_point_V = tf.unsorted_segment_sum(tf.ones_like(V),                   
+                                                 V,                        
+                                                 tf.shape(V)[0])'''
+            QQ = tf.dynamic_partition(Q, dups_in_a, num_partitions=3500)
+            KK = tf.dynamic_partition(K, dups_in_a, num_partitions=3500)
+            VV = tf.dynamic_partition(V, dups_in_a, num_partitions=3500)
+
+
+            #print('QQ = {}'.format(QQ))
+            print('QQ = {}'.format(type(QQ)))
+            #------------------------------------------------
+            new_edge_feature = []
+
+            for i,(local_QQ,local_KK,local_VV) in enumerate(zip(QQ,KK,VV)):
+
+            #molecular = tf.matmul(QQ,KK)
+
+            #print('molecular = {}'.format(molecular))
+            #QK = molecular
+
+                output = tf.keras.layers.Attention()([local_QQ, local_KK,local_VV])
+
+                #print('Q_SHAPE = {}'.format(Q.get_shape().as_list()))
+                #print('k_SHAPE = {}'.format(K.get_shape().as_list()))
+                #print('v_SHAPE = {}'.format(V.get_shape().as_list()))
+                #print(K.get_shape().as_list())
+                #print(V.get_shape().as_list())
+                '''denominator = tf.sqrt(tf.cast(tf.shape(local_QQ)[0],tf.float32), name=None) 
+                molecular = tf.tensordot(local_QQ,tf.transpose(local_KK),axes = 1)
+                QK = molecular/denominator
+                alphas = tf.nn.softmax(QK, name='alphas')    
+                output = tf.tensordot(alphas,local_VV,axes=1)'''
+
+                new_edge_feature.append(output)
+                print('output = {}'.format(output))
+                print(type(output))
+                #return output
+            concat_tensor = tf.concat(new_edge_feature, 0)
+            #
+
+
+            concat_tensor = tf.layers.dense(concat_tensor, 300, use_bias=True)
+            return concat_tensor
+    #------------------------------------------------need modify
+
+def attention(edge_features,edges,t_num_group):
+    def dynamic_partition_png(vals, idx, max_partitions):
+        """Encodes output of dynamic partition as a Tensor of png-encoded strings."""
+        max_idx = tf.reduce_max(idx)
+        max_vals = tf.reduce_max(idx)
+        with tf.control_dependencies([tf.Assert(max_vals<256, ["vals must be <256"])]):
+            outputs = tf.dynamic_partition(vals, idx, num_partitions=max_partitions)
+        png_outputs = []
+        dummy_png = tf.image.encode_png(([[[2]]]))
+        not_empty_ops = [] # ops that detect empty lists that aren't at the end
+        for i, o in enumerate(outputs):
+            reshaped_o = tf.reshape(tf.cast(o, tf.uint8), [-1, 1, 1])
+
+            png_output = tf.cond(tf.size(reshaped_o)>0, lambda: tf.image.encode_png(reshaped_o), lambda: dummy_png)
+            png_outputs.append(png_output)
+            not_empty_ops.append(tf.logical_or(i>max_idx, tf.size(reshaped_o)>0))
+        packed_tensor = tf.stack(png_outputs)
+        no_illegal_empty_lists = tf.reduce_all(tf.stack(not_empty_ops))
+        with tf.control_dependencies([tf.Assert(no_illegal_empty_lists, ["empty lists must be last"])]):
+            result = packed_tensor[:max_idx+1]
+        return result
+
+    def decode(p):
+        return tf.image.decode_png(p)[:, 0, 0]
+    def get_duplicated(tensor):
+        unique_a_vals, unique_idx = tf.unique(tensor)
+        #init = tf.initialize_all_variables() 
+        count_a_unique = tf.unsorted_segment_sum(tf.ones_like(tensor),unique_idx,tf.shape(tensor)[0])                   
+        #more_than_one = tf.greater(count_a_unique, 1)                               
+        #more_than_one_idx = tf.squeeze(tf.where(more_than_one))                     
+        #more_than_one_vals = tf.squeeze(tf.gather(unique_a_vals, more_than_one_idx)) #[not_duplicated, _] 
+        not_duplicated,_= tf.raw_ops.ListDiff(x = tensor, y = unique_a_vals, out_idx=tf.dtypes.int32, name=None)                
+        dups_in_a, indexes_in_a = tf.raw_ops.ListDiff(x = tensor, y =not_duplicated,out_idx=tf.dtypes.int32, name=None)
+        return dups_in_a, indexes_in_a
+
+    #for i in range(len(Ks)-1):
+    
+    #print(tf.shape(edge_features))
+    '''Q = slim.fully_connected(edge_features,300,
+        activation_fn=None,
+        normalizer_fn=None)
+    K = slim.fully_connected(edge_features,300,
+        activation_fn=None,
+        normalizer_fn=None)
+    V = slim.fully_connected(edge_features, 300,
+        activation_fn=None,
+        normalizer_fn=None)'''
+    #print(type(edges[:, 1]))
+    #sess=tf.Session()
+    #t_num_group
+    #loop = tf.math.reduce_sum(t_num_group)
+    a = edges[:, 1]
+    dups_in_a, indexes_in_a = get_duplicated(a)
+    break_point = tf.unsorted_segment_sum(tf.ones_like(a),                   
+                                         a,                        
+                                         tf.shape(a)[0])
+    '''i=1
+    #tf.cond(tf.size(reshaped_o)>0, lambda : att(local_edge_features), lambda: 1.0)
+    an = dups_in_a[0]
+    def cond(dups_in_a,i,an):
+
+        return i<10
+
+    def body(dups_in_a,i,an):
+        return dups_in_a[i]
+    an = tf.while_loop(cond, body, [dups_in_a,i,an])
+    print(an,i)'''
+
+    #new_edge_features = tf.gather(edge_features,indexes_in_a)
+    #max_value = tf.math.reduce_max(dups_in_a)
+    #result = tf.dynamic_partition(new_edge_features, dups_in_a)
+    #split_edge_features = tf.split(a,break_point)
+
+    #sess = tf.Session()
+    #vals = tf.constant([1,2,3,4,5])
+    #idx = [0, 1, 1, 1, 1]
+    dd = tf.dynamic_partition(edge_features, dups_in_a, num_partitions=3000)
+
+    #tf_vals = dynamic_partition_png(edge_features, dups_in_a, 3000)
+    #print(type(tf_vals))
+    #local_edge_features = tf_vals
+    def att(local_edge_features):
+        with tf.variable_scope('attention', reuse=tf.AUTO_REUSE):
+            Q = tf.layers.dense(local_edge_features, 300, use_bias=True) # (N, T_q, d_model)
+            K = tf.layers.dense(local_edge_features, 300, use_bias=True) # (N, T_k, d_model)
+            V = tf.layers.dense(local_edge_features, 300, use_bias=True) # (N, T_k, d_model)
+            #tf.cast(x, dtype)
+            #print('Q_SHAPE = {}'.format(Q.get_shape().as_list()))
+            #print('k_SHAPE = {}'.format(K.get_shape().as_list()))
+            #print('v_SHAPE = {}'.format(V.get_shape().as_list()))
+            #print(K.get_shape().as_list())
+            #print(V.get_shape().as_list())
+            denominator = tf.sqrt(tf.cast(tf.shape(local_edge_features)[0],tf.float32), name=None) 
+            molecular = tf.tensordot(Q,tf.transpose(K),axes = 1)
+            QK = molecular/denominator
+            alphas = tf.nn.softmax(QK, name='alphas')    
+            output = tf.tensordot(alphas,V,axes=1)
+            #print('output = {}'.format(output))
+            #print(type(output))
+            return output
+    max_idx = tf.reduce_max(dups_in_a)
+    not_empty_ops = []
+    #y = tf.Variable(np.empty((, 300), dtype=np.float32))
+    with tf.variable_scope('attention', reuse=tf.AUTO_REUSE):
+        for i,local_edge_features in enumerate(dd):
+        #reshaped_o = tf.reshape(tf.cast(local_edge_features, tf.uint8), [-1, 1, 1])
+        #not_empty_ops.append(tf.logical_or(i>max_idx, tf.size(reshaped_o)>0))
+        #png_output = tf.cond(tf.size(reshaped_o)>0, lambda : att(local_edge_features), lambda: 1.0)
+        #print(tf.shape(png_output))
+        #print(type(png_output))
+        #att(local_edge_features)
+        #print(i)
+        #local_edge_features = tf.gather(edge_features,idx_list)
+        
+            Q = tf.layers.dense(local_edge_features, 300, use_bias=True) # (N, T_q, d_model)
+            K = tf.layers.dense(local_edge_features, 300, use_bias=True) # (N, T_k, d_model)
+            V = tf.layers.dense(local_edge_features, 300, use_bias=True) # (N, T_k, d_model)
+            #tf.cast(x, dtype)
+            print('Q_SHAPE = {}'.format(Q.get_shape().as_list()))
+            print('k_SHAPE = {}'.format(K.get_shape().as_list()))
+            print('v_SHAPE = {}'.format(V.get_shape().as_list()))
+            #print(K.get_shape().as_list())
+            #print(V.get_shape().as_list())
+            denominator = tf.sqrt(tf.cast(tf.shape(local_edge_features)[0],tf.float32), name=None) 
+            molecular = tf.tensordot(Q,tf.transpose(K),axes = 1)
+            QK = molecular/denominator
+            alphas = tf.nn.softmax(QK, name='alphas')    
+            output = tf.tensordot(alphas,V,axes=1)
+            print('output = {}'.format(output))
+            print(type(output))
+
+            #tf.concat([t1, t2], 0)
+        #edge_features[idx_list] = output
+        #i+=1
+        #pass
+    #sess = tf.Session()
+    #print(sess.run(dd[0]))
+    #print(dd)
+    '''def cond(dd):
+    return dd
+
+    def body(dd):
+        i = i + 1
+        return i, n 
+    tf.while_loop(cond, body, dd)'''
+    '''print('dkfjdslk')
+    print(type(dd[0]))
+    print(sess.run(dd[0][]))
+    tf_vals = dynamic_partition_png(vals, idx, 1000)
+    print(tf_vals)
+    print(sess.run(decode(tf_vals[0]))) # => [1 2]
+    print(sess.run(decode(tf_vals[1]))) # => [3 4 5]'''
+
+    '''i = 0
+    break_p = 0
+    with tf.Session() as sess:
+        scalar = loop.eval()
+    for i in scalar:
+        pass'''
+    '''while(1):
+
+        break_p = break_p + break_point[i]
+        indexes_in_a[break_p]
+        i+=1'''
+    
+    #[i for i in dups_in_a]
+    #dups_in_a[:6]
+    #tf.map_fn(fn=lambda t: [i for i in t], elems=dups_in_a)
+    #dups_in_a_2, indexes_in_a_2 = get_duplicated(dups_in_a)
+    #indexes_in_a_2
+    '''unique_a_vals, unique_idx = tf.unique(edges[:, 1])
+    count_a_unique = tf.unsorted_segment_sum(tf.ones_like(a),unique_idx,tf.shape(a)[0])                   
+    more_than_one = tf.greater(count_a_unique, 1)                               
+    more_than_one_idx = tf.squeeze(tf.where(more_than_one))                     
+    more_than_one_vals = tf.squeeze(tf.gather(unique_a_vals, more_than_one_idx)) #[not_duplicated, _] 
+    not_duplicated,_= tf.raw_ops.ListDiff(
+    x = a, y = more_than_one_vals, out_idx=tf.dtypes.int32, name=None
+)
+    init = tf.initialize_all_variables()                
+    dups_in_a, indexes_in_a = tf.raw_ops.ListDiff(x = a, y =not_duplicated,out_idx=tf.dtypes.int32, name=None)     #'''
+
+    print('------------------')
+    print(type(indexes_in_a))
+    print('---------------')
+    '''with tf.Session() as s:                                                     
+        s.run(init)                                                             
+        a, dupvals, dupidxes, dia = s.run([a, more_than_one_vals,                    
+                                      indexes_in_a, dups_in_a])'''
+    '''    print('--------------------') 
+        print ("Input: ", a  )                                                    
+        print ("Duplicate values: ", dupvals    )                                 
+        print ("Indexes of duplicates in a: ", dupidxes)
+        print ("Dup vals with dups: ", dia)
+        print('--------------------') '''
+    #shape = tf.scan(fn, tf.shape(y))
+    #loop = tf.size(y)
+    #print(shape.eval(session=sess))
+    #y = y.eval(session=sess)
+    #v = y.get_shape()
+    #loop = v.num_elements()
+    #print(type(tf.shape(y)[0]))
+    #for i in range(sess.run(loop)):
+    #edges_idx_array = tf.Session().run(edges[:, 1])
+    '''while(1):
+        idx_list = [idx for idx,dest in enumerate(edges_idx_array) if dest==y[i]]
+    #for i in range(len(y)):
+        local_edge_features = tf.gather(edge_features,idx_list)
+        Q = tf.layers.dense(local_edge_features, 300, use_bias=True) # (N, T_q, d_model)
+        K = tf.layers.dense(local_edge_features, 300, use_bias=True) # (N, T_k, d_model)
+        V = tf.layers.dense(local_edge_features, 300, use_bias=True) # (N, T_k, d_model)
+        #tf.cast(x, dtype)
+        print('Q_SHAPE = {}'.format(Q.get_shape().as_list()))
+        print('k_SHAPE = {}'.format(K.get_shape().as_list()))
+        print('v_SHAPE = {}'.format(V.get_shape().as_list()))
+        #print(K.get_shape().as_list())
+        #print(V.get_shape().as_list())
+        denominator = tf.sqrt(tf.cast(tf.shape(local_edge_features)[0],tf.float32), name=None) 
+        molecular = tf.tensordot(Q,tf.transpose(K),axes = 1)
+        QK = molecular/denominator
+        alphas = tf.nn.softmax(QK, name='alphas')    
+        output = tf.tensordot(alphas,V,axes=1)
+        edge_features[idx_list] = output
+        i+=1
+    return edge_features'''
 class GraphNetAutoCenter(object):
     """A class to implement point graph netural network layer."""
 
@@ -300,6 +636,8 @@ class GraphNetAutoCenter(object):
         input_vertex_coordinates,
         NOT_USED,
         edges,
+        edgetozero,                                                      ## add change
+        t_num_group,
         edge_MLP_depth_list=None,
         edge_MLP_normalization_type='fused_BN_center',
         edge_MLP_activation_type = 'ReLU',
@@ -347,6 +685,10 @@ class GraphNetAutoCenter(object):
         # Gather the destination vertex of the edges
         d_vertex_coordinates = tf.gather(input_vertex_coordinates, edges[:, 1])
         # Prepare initial edge features
+        if edgetozero==1:                                                             ######add change
+            #d_vertex_coordinates = s_vertex_coordinates
+            #s_vertex_features = tf.zeros(tf.shape(s_vertex_features, out_type=tf.dtypes.int32), dtype=tf.dtypes.float32)
+            pass
         edge_features = tf.concat(
             [s_vertex_features, s_vertex_coordinates - d_vertex_coordinates],
              axis=-1)
@@ -358,7 +700,19 @@ class GraphNetAutoCenter(object):
                 is_logits=False,
                 normalization_type=edge_MLP_normalization_type,
                 activation_type=edge_MLP_activation_type)
+            #print('edge_features = {}'.format(edge_features))
+            #print('----------------------')
+            #print(edge_features.get_shape().as_list())
+            #tf.shape(edge_features, out_type=tf.dtypes.int32, name=None)
+            #tf.print(edge_features, output_stream=sys.stderr)
+            #print('-----------------------')
             # Aggregate edge features
+            #edge_features = 
+            #attention(edge_features,edges,t_num_group)
+            #attention_v2(edge_features,edges,t_num_group)
+            #if edgetozero==1:
+            edge_features = attention_v2(edge_features,edges,t_num_group)
+
             aggregated_edge_features = self._aggregation_fn(
                 edge_features,
                 edges[:, 1],

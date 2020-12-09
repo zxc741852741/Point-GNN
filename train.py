@@ -7,6 +7,9 @@ import copy
 from sys import getsizeof
 from multiprocessing import Pool, Queue, Process
 
+import sys
+sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+
 import numpy as np
 import tensorflow as tf
 
@@ -128,22 +131,83 @@ def fetch_data(frame_idx):
     vertex_coord_list = [p.astype(np.float32) for p in vertex_coord_list]
     keypoint_indices_list = [e.astype(np.int32) for e in keypoint_indices_list]
     edges_list = [e.astype(np.int32) for e in edges_list]
+    #print('keypoint_indices_list = {}'.format(keypoint_indices_list))
+    #print('-------------------')
+    #print('edges_list = {}'.format(edges_list))
+    #dest_list_1 = edges_list[0][:,1]
+    #dest_list_2 = edges_list[1][:,1]
+    #print('dest_list_2 = {}'.format(dest_list_2))
+    #dest_group = []
+    #last_dest = 0
+    #dest_group_list = []
+    #num_group = 0
+    '''output_dest_group_list = []
+    num_group_list = []
+    for each_edges_list in edges_list:
+        dest_group = []
+        last_dest = 0
+        dest_group_list = []
+        num_group = 0
+        #output_dest_group_list = []
+        #num_group_list = []
+        dest_list = each_edges_list[:,1]
+        #print('dest_list_len = {}'.format(len(dest_list)))
+        for dest_idx,dest in enumerate(dest_list):
+            #print(dest_idx)
+            if dest_idx == len(dest_list)-1:
+                dest_group.append(dest_idx)
+                #print('dsfljdslfds')
+                dest_group_list.append(np.array(dest_group))
+                num_group+=1
+                break
+            if dest==last_dest:
+                dest_group.append(dest_idx)
+            if dest!=last_dest:
+                dest_group_list.append(np.array(dest_group))
+                num_group+=1
+                dest_group = []
+                dest_group.append(dest_idx)
+            last_dest = dest
+        #output_dest_group_list.append(np.array(dest_group_list))  
+        num_group_list.append(np.array(num_group))'''
+        #print('dest_idx ={}'.format(dest_idx))
+    #print('output_dest_group_list = {}'.format(output_dest_group_list))  
+    #print('num_group_list = {}'.format(num_group_list))  
+    #print('dest_group_list = {}'.format(len(dest_group_list)))
+    #print('num_group = {}'.format(num_group))
+    #print('dest = {}'.format(dest))
+
+    #print('--------------------')
+    #bbb = 1
     cls_labels = cls_labels.astype(np.int32)
     encoded_boxes = encoded_boxes.astype(np.float32)
     valid_boxes = valid_boxes.astype(np.float32)
     return(input_v, vertex_coord_list, keypoint_indices_list, edges_list,
-        cls_labels, encoded_boxes, valid_boxes)
+        cls_labels, encoded_boxes, valid_boxes) #,output_dest_group_list,num_group_list)
 
 def batch_data(batch_list):
     N_input_v, N_vertex_coord_list, N_keypoint_indices_list, N_edges_list,\
     N_cls_labels, N_encoded_boxes, N_valid_boxes = zip(*batch_list)
+    #print('N_dest_group_list_shape = {}'.format(np.array(N_dest_group_list).shape))
+    #print('N_dest_group_list = {}'.format(N_dest_group_list))
+    #print('N_num_group = {}'.format(N_num_group))
+    
+    #print('N_edges_list_shape = {}'.format(np.array(N_edges_list).shape))
+    #print('N_edges_list = {}'.format(N_edges_list))
+    #print('dfkljsdlfjdslf')
+
     batch_size = len(batch_list)
+    #print('batch_size = {}'.format(batch_size))
     level_num = len(N_vertex_coord_list[0])
     batched_keypoint_indices_list = []
     batched_edges_list = []
+    batched_dest_group_list = []
+    batched_N_num_group_list = []
     for level_idx in range(level_num-1):
         centers = []
         vertices = []
+        dest_group_idx = []
+        num_group_list = []
         point_counter = 0
         center_counter = 0
         for batch_idx in range(batch_size):
@@ -152,11 +216,16 @@ def batch_data(batch_list):
             vertices.append(np.hstack(
                 [N_edges_list[batch_idx][level_idx][:,[0]]+point_counter,
                  N_edges_list[batch_idx][level_idx][:,[1]]+center_counter]))
+            #dest_group_idx.append(N_dest_group_list[batch_idx][level_idx]+center_counter)
+            #num_group_list.append(N_num_group[batch_idx][level_idx])
             point_counter += N_vertex_coord_list[batch_idx][level_idx].shape[0]
             center_counter += \
                 N_keypoint_indices_list[batch_idx][level_idx].shape[0]
         batched_keypoint_indices_list.append(np.vstack(centers))
         batched_edges_list.append(np.vstack(vertices))
+        #print('batched_dest_group_list = {}'.format(batched_dest_group_list))
+        #batched_dest_group_list.append(np.hstack(dest_group_idx))
+        #batched_N_num_group_list.append(np.hstack(num_group_list))
     batched_vertex_coord_list = []
     for level_idx in range(level_num):
         points = []
@@ -168,9 +237,13 @@ def batch_data(batch_list):
     batched_cls_labels = np.vstack(N_cls_labels)
     batched_encoded_boxes = np.vstack(N_encoded_boxes)
     batched_valid_boxes = np.vstack(N_valid_boxes)
+    #print('batched_edges_list_shape = {}'.format(np.array(batched_edges_list).shape))
+    #print('batched_dest_group_list = {}'.format(batched_dest_group_list))
+    #print('batched_N_num_group_list = {}'.format(batched_N_num_group_list))
+    batched_dest_group_list,batched_N_num_group_list = [],[]
     return (batched_input_v, batched_vertex_coord_list,
         batched_keypoint_indices_list, batched_edges_list, batched_cls_labels,
-        batched_encoded_boxes, batched_valid_boxes)
+        batched_encoded_boxes, batched_valid_boxes,batched_dest_group_list,batched_N_num_group_list)
 
 # model =======================================================================
 if 'COPY_PER_GPU' in train_config:
@@ -217,6 +290,16 @@ for gi in range(NUM_GPU):
                 t_keypoint_indices_list.append(
                     tf.placeholder(dtype=tf.int32, shape=[None, 1]))
 
+            t_dest_group_list = [] 
+            for _ in range(len(config['graph_gen_kwargs']['level_configs'])):
+                t_dest_group_list.append(
+                    tf.placeholder(dtype=tf.int32, shape=[None,None]))
+            
+            t_num_group_list = []
+            for _ in range(len(config['graph_gen_kwargs']['level_configs'])):
+                t_num_group_list.append(
+                    tf.placeholder(dtype=tf.int32, shape=[4]))
+
             t_class_labels = tf.placeholder(dtype=tf.int32, shape=[None, 1])
             t_encoded_gt_boxes = tf.placeholder(
                 dtype=tf.float32, shape=[None, 1, BOX_ENCODING_LEN])
@@ -229,7 +312,7 @@ for gi in range(NUM_GPU):
                 **config['model_kwargs'])
             t_logits, t_pred_box = model.predict(
                 t_initial_vertex_features, t_vertex_coord_list,
-                t_keypoint_indices_list, t_edges_list, t_is_training)
+                t_keypoint_indices_list, t_edges_list, t_is_training,t_num_group_list)
             t_probs = model.postprocess(t_logits)
             t_predictions = tf.argmax(t_probs, axis=-1, output_type=tf.int32)
             t_loss_dict = model.loss(t_logits, t_class_labels, t_pred_box,
@@ -260,7 +343,9 @@ for gi in range(NUM_GPU):
                  't_num_endpoint': t_num_endpoint,
                  't_num_valid_endpoint': t_num_valid_endpoint,
                  't_classwise_loc_loss': t_classwise_loc_loss,
-                 't_total_loss': t_total_loss
+                 't_total_loss': t_total_loss,
+                 't_dest_group_list':t_dest_group_list,
+                 't_num_group_list':t_num_group_list
                  })
 
 if 'unify_copies' in train_config:
@@ -518,7 +603,7 @@ log_path = os.path.join(train_config['train_dir'],'log.txt')
 
 with tf.Session(graph=graph,
     config=tf.ConfigProto(
-    allow_soft_placement=True, gpu_options=gpu_options,)) as sess:
+    allow_soft_placement=True, gpu_options=gpu_options,)) as sess: #intra_op_parallelism_threads = 8,inter_op_parallelism_threads=0,
     sess.run(tf.variables_initializer(tf.global_variables()))
     states = tf.train.get_checkpoint_state(train_config['train_dir'])
     if states is not None:
@@ -529,10 +614,12 @@ with tf.Session(graph=graph,
     local_variables_initializer = tf.variables_initializer(tf.local_variables())
     for epoch_idx in range((previous_step*batch_size)//NUM_TEST_SAMPLE,
     train_config['max_epoch']):
+        start_time = time.time()
         sess.run(local_variables_initializer)
         start_time = time.time()
         frame_idx_list = np.random.permutation(NUM_TEST_SAMPLE)
         for batch_idx in range(0, NUM_TEST_SAMPLE-batch_size+1, batch_size):
+            print('batch_idx = {}'.format(batch_idx))
             mid_time = time.time()
             device_batch_size = batch_size//(COPY_PER_GPU*NUM_GPU)
             total_feed_dict = {}
@@ -541,8 +628,12 @@ with tf.Session(graph=graph,
                     batch_idx+\
                     gi*device_batch_size:batch_idx+(gi+1)*device_batch_size]
                 input_v, vertex_coord_list, keypoint_indices_list, edges_list, \
-                cls_labels, encoded_boxes, valid_boxes \
+                cls_labels, encoded_boxes, valid_boxes,dest_group_list,num_group_list \
                     = data_provider.provide_batch(batch_frame_idx_list)
+                #print('keypoint_indices_list = {}'.format(keypoint_indices_list))
+                #print('second_edges_list = {}'.format(edges_list))
+                #print('second_dest_group_list = {}'.format(dest_group_list))
+                #print('second_num_group_list = {}'.format(num_group_list))
                 t_initial_vertex_features = \
                     input_tensor_sets[gi]['t_initial_vertex_features']
                 t_class_labels = input_tensor_sets[gi]['t_class_labels']
@@ -550,6 +641,8 @@ with tf.Session(graph=graph,
                 t_valid_gt_boxes = input_tensor_sets[gi]['t_valid_gt_boxes']
                 t_is_training = input_tensor_sets[gi]['t_is_training']
                 t_edges_list = input_tensor_sets[gi]['t_edges_list']
+                #t_dest_group_list = input_tensor_sets[gi]['t_dest_group_list']
+                #t_num_group_list = input_tensor_sets[gi]['t_num_group_list']
                 t_keypoint_indices_list = \
                     input_tensor_sets[gi]['t_keypoint_indices_list']
                 t_vertex_coord_list = \
@@ -562,6 +655,8 @@ with tf.Session(graph=graph,
                     t_is_training: True,
                 }
                 feed_dict.update(dict(zip(t_edges_list, edges_list)))
+                #feed_dict.update(dict(zip(t_dest_group_list, dest_group_list)))
+                #feed_dict.update(dict(zip(t_num_group_list, num_group_list)))
                 feed_dict.update(
                     dict(zip(t_keypoint_indices_list, keypoint_indices_list)))
                 feed_dict.update(
@@ -643,7 +738,8 @@ with tf.Session(graph=graph,
             results['loc_loss_cls_%d_box_%d'%(class_idx, 5)],
             results['loc_loss_cls_%d_box_%d'%(class_idx, 6)]),
             )
-
+        end_time = time.time()
+        print('use time = {}'.format(end_time - start_time))
         # add summaries ====================================================
         for key in metrics_update_ops:
             write_summary_scale(key, results[key], results['step'],

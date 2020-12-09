@@ -82,6 +82,7 @@ class MultiLayerFastLocalGraphModelV2(object):
         t_keypoint_indices_list,
         t_edges_list,
         is_training,
+        t_num_group_list
         ):
         """
         Predict the objects with initial vertex features and a list of graphs.
@@ -110,13 +111,13 @@ class MultiLayerFastLocalGraphModelV2(object):
         [N_output, num_classes, box_encoding_len] box_encodings tensor for
         localization.
         """
-        with slim.arg_scope([slim.batch_norm], is_training=is_training), \
+        with slim.arg_scope([slim.batch_norm],is_training=is_training), \
             slim.arg_scope([slim.fully_connected],
                 weights_regularizer=self._regularizer):
                 tfeatures_list = []
                 tfeatures = t_initial_vertex_features
                 tfeatures_list.append(tfeatures)
-                for idx in range(len(self._layer_configs)-1):
+                for idx in range(len(self._layer_configs)-1):  #origin -1
                     layer_config = self._layer_configs[idx]
                     layer_scope = layer_config['scope']
                     layer_type = layer_config['type']
@@ -125,6 +126,12 @@ class MultiLayerFastLocalGraphModelV2(object):
                     t_vertex_coordinates = t_vertex_coord_list[graph_level]
                     t_keypoint_indices = t_keypoint_indices_list[graph_level]
                     t_edges = t_edges_list[graph_level]
+                    t_num_group = t_num_group_list[graph_level]
+                    if idx == 1:                                                          ## add change
+                        edgetozero = 1
+                        #tfeatures = tfeatures_list[idx-1]
+                    else :
+                        edgetozero = 0
                     with tf.variable_scope(layer_scope, reuse=tf.AUTO_REUSE):
                         flgn = self._default_layers_type[layer_type]
                         print('@ level %d Graph, Add layer: %s, type: %s'%
@@ -136,6 +143,8 @@ class MultiLayerFastLocalGraphModelV2(object):
                                     t_vertex_coordinates,
                                     t_keypoint_indices,
                                     t_edges,
+                                    edgetozero,                                       ## add change                 
+                                    t_num_group,
                                     **layer_kwargs)
                         else:
                             tfeatures = flgn.apply_regular(
@@ -143,6 +152,8 @@ class MultiLayerFastLocalGraphModelV2(object):
                                 t_vertex_coordinates,
                                 t_keypoint_indices,
                                 t_edges,
+                                edgetozero,
+                                t_num_group,
                                 **layer_kwargs)
 
                         tfeatures_list.append(tfeatures)
