@@ -350,12 +350,6 @@ class GraphNetAutoCenter(object):
         edge_features = tf.concat(
             [s_vertex_features, s_vertex_coordinates - d_vertex_coordinates],
              axis=-1)
-        #print('------------------------------------')
-        #print('edge_features = {}'.format(edge_features))
-
-        #sess = tf.Session()
-        #sess.run(tf.print(edge_features,[edge_features]))
-
         with tf.variable_scope('extract_vertex_features'):
             # Extract edge features
             edge_features = self._edge_feature_fn(

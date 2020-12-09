@@ -704,7 +704,7 @@ class KittiDataset(object):
         velo_points = velo_data[:,:3]
         reflections = velo_data[:,[3]]
         max_r = np.amax(reflections) 
-        print('max_r = {}'.format(max_r))
+        #print('max_r = {}'.format(max_r))
         if xyz_range is not None:
             x_range, y_range, z_range = xyz_range
             mask =(
@@ -725,7 +725,7 @@ class KittiDataset(object):
             Returns: Points.
             """
             velo_points = self.ros_get_velo_points(frame_idx,ros_lidar, xyz_range=xyz_range)
-            print('velo_points = {}'.format(velo_points))
+            #print('velo_points = {}'.format(velo_points))
             if calib is None:
                 calib = self.get_calib(frame_idx)
             cam_points = self.velo_points_to_cam(velo_points, calib)
