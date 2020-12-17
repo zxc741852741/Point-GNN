@@ -1,17 +1,31 @@
 """This file implement an inference pipeline for Point-GNN on KITTI dataset"""
 
+import math
 import os
 import time
 import argparse
 import multiprocessing
 from functools import partial
 
+import ros_numpy
+import rospy
+from sensor_msgs.msg import Image , PointCloud2 , PointField
+from visualization_msgs.msg import Marker ,MarkerArray 
+from geometry_msgs.msg import Point
+import sensor_msgs.point_cloud2 as pcl2 
+from std_msgs.msg import Header
+
+import pcl
 import numpy as np
 import tensorflow as tf
 import open3d
-import cv2
 from tqdm import tqdm
+
 import sys
+sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+
+print(sys.path)
+import cv2
 
 from dataset.kitti_dataset import KittiDataset, Points
 from models.graph_gen import get_graph_generate_fn
@@ -27,13 +41,8 @@ from util.ros_utils import *
 
 
 
-import rospy
-from sensor_msgs.msg import Image , PointCloud2 , PointField
-from visualization_msgs.msg import Marker ,MarkerArray 
-from geometry_msgs.msg import Point
-import sensor_msgs.point_cloud2 as pcl2 
-from std_msgs.msg import Header
-import math
+
+
 
 parser = argparse.ArgumentParser(description='Point-GNN inference on KITTI')
 parser.add_argument('checkpoint_path', type=str,
@@ -331,6 +340,7 @@ class sub_pt_label_detection:
         self.pcl_pub = rospy.Publisher('/pointcloud',PointCloud2,queue_size=1000)
         self.edge_pub = rospy.Publisher('/edges', MarkerArray, queue_size=1000)
 
+
         #self.lidar_sub = rospy.Subscriber("/nuscenes_lidar", PointCloud2, self.callback,queue_size = 1000)   #nuscenes_bag
         self.lidar_sub = rospy.Subscriber("/lidar", PointCloud2, self.callback,queue_size = 1000)             #kitti_bag
         self.label_sub = rospy.Subscriber("/lidar_label", MarkerArray, self.label_callback,queue_size = 3000)
@@ -401,8 +411,12 @@ class sub_pt_label_detection:
 
         #min_time_diff = 80000000000000000000000
         #self.label_timestamp_list[0]
+        #print(self.label_timestamp_list)
+        if not self.label_timestamp_list:
+            self.label_timestamp_list.append(0)
+            lidar_time = 0
         time_diff = abs(self.label_timestamp_list[0]-lidar_time)
-        
+
         #print('self.label_timestamp_list[0] = {}'.format(self.label_timestamp_list[0]))
         #print('lidar_time = {}'.format(lidar_time))
 
@@ -433,7 +447,7 @@ class sub_pt_label_detection:
                 points = pt.copy()
                 ros_lidar = points
                 #print(points)
-               
+                print(pt)
                 frame_idx = 0
                 start_time = time.time()
                 if VISUALIZATION_LEVEL == 2:
@@ -1033,7 +1047,11 @@ class sub_pt_label_detection:
                 #print('detection_boxes_3d_corners = {}'.format(detection_boxes_3d_corners))
                 publish_3dbox(self.box3d_pub, detection_boxes_3d_corners,types)
             #self.gt_marker_array_list.append(label_mk_array)
-            self.box3d_pub.publish(self.gt_marker_array_list[0])
+
+            
+            if self.gt_marker_array_list:
+                self.box3d_pub.publish(self.gt_marker_array_list[0])
+                del self.gt_marker_array_list[0]
             #self.box3d_pub.publish(self.ori_label_list[0])
             #draw_ros_edge(self.box3d_pub,lines,pub_points)
             #edges_list[0][:10,:]
@@ -1045,7 +1063,7 @@ class sub_pt_label_detection:
             choose = np.random.random_integers(0, 700000, 10000)
             #draw_ros_edge(self.box3d_pub,all_edges,pub_points)              #draw_all_edges
             #draw_ros_edge(self.box3d_pub,all_edges[choose,:],pub_points)   #draw_random_edges
-            draw_ros_edge(self.box3d_pub,lines,pub_points)                  #draw_last_layer_edges
+            #draw_ros_edge(self.box3d_pub,lines,pub_points)                  #draw_last_layer_edges
             #keypoint_indices_list[0]
             #draw_ros_sphere(self.box3d_pub,all_edges,pub_points)           #draw_all_sphere
 
@@ -1053,7 +1071,7 @@ class sub_pt_label_detection:
 
 
             #publish_cube_cubinput(self.box3d_pub, self.gt_list[0])
-            del self.gt_marker_array_list[0]
+            
         #del self.ori_label_list[0]
         self.count_scan_num+=1
         print('------------------------------------------------LL')
