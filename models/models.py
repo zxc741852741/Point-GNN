@@ -82,7 +82,6 @@ class MultiLayerFastLocalGraphModelV2(object):
         t_keypoint_indices_list,
         t_edges_list,
         is_training,
-        t_num_group_list
         ):
         """
         Predict the objects with initial vertex features and a list of graphs.
@@ -126,7 +125,7 @@ class MultiLayerFastLocalGraphModelV2(object):
                     t_vertex_coordinates = t_vertex_coord_list[graph_level]
                     t_keypoint_indices = t_keypoint_indices_list[graph_level]
                     t_edges = t_edges_list[graph_level]
-                    t_num_group = t_num_group_list[graph_level]
+                    #t_num_group = t_num_group_list[graph_level]
                     if idx == 1:                                                          ## add change
                         edgetozero = 1
                         #tfeatures = tfeatures_list[idx-1]
@@ -144,7 +143,6 @@ class MultiLayerFastLocalGraphModelV2(object):
                                     t_keypoint_indices,
                                     t_edges,
                                     edgetozero,                                       ## add change                 
-                                    t_num_group,
                                     **layer_kwargs)
                         else:
                             tfeatures = flgn.apply_regular(
@@ -153,7 +151,6 @@ class MultiLayerFastLocalGraphModelV2(object):
                                 t_keypoint_indices,
                                 t_edges,
                                 edgetozero,
-                                t_num_group,
                                 **layer_kwargs)
 
                         tfeatures_list.append(tfeatures)

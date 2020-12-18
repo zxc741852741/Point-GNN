@@ -225,8 +225,7 @@ class PointSetPooling(object):
         point_coordinates,
         keypoint_indices,
         set_indices,
-        edgetozero,                                                                   ## add change
-        t_num_group,
+        edgetozero,                                                                   ## add change,
         point_MLP_depth_list=None,
         point_MLP_normalization_type='fused_BN_center',
         point_MLP_activation_type = 'ReLU',
@@ -285,7 +284,7 @@ class PointSetPooling(object):
                 normalization_type=output_MLP_normalization_type,
                 activation_type=output_MLP_activation_type)
         return set_features
-def attention_v2(edge_features,edges,t_num_group):
+def attention_v2(edge_features,edges,keypoint_indices):
     def get_duplicated(tensor):
         unique_a_vals, unique_idx = tf.unique(tensor)
         #init = tf.initialize_all_variables() 
@@ -336,6 +335,7 @@ def attention_v2(edge_features,edges,t_num_group):
             V = tf.layers.dense(edge_features, 300, use_bias=True) # (N, T_k, d_model)
             #tf.cast(x, dtype)
             a = edges[:, 1]
+            a = tf.gather(keypoint_indices, set_indices[:, 1])
             dups_in_a, indexes_in_a = get_duplicated(a)
             break_point = tf.unsorted_segment_sum(tf.ones_like(a),                   
                                                  a,                        
@@ -394,7 +394,7 @@ def attention_v2(edge_features,edges,t_num_group):
             return concat_tensor
     #------------------------------------------------need modify
 
-def attention(edge_features,edges,t_num_group):
+def attention(edge_features,edges):
     def dynamic_partition_png(vals, idx, max_partitions):
         """Encodes output of dynamic partition as a Tensor of png-encoded strings."""
         max_idx = tf.reduce_max(idx)
@@ -637,7 +637,6 @@ class GraphNetAutoCenter(object):
         NOT_USED,
         edges,
         edgetozero,                                                      ## add change
-        t_num_group,
         edge_MLP_depth_list=None,
         edge_MLP_normalization_type='fused_BN_center',
         edge_MLP_activation_type = 'ReLU',
@@ -711,7 +710,7 @@ class GraphNetAutoCenter(object):
             #attention(edge_features,edges,t_num_group)
             #attention_v2(edge_features,edges,t_num_group)
             #if edgetozero==1:
-            edge_features = attention_v2(edge_features,edges,t_num_group)
+            edge_features = attention_v2(edge_features,edges,NOT_USED)
 
             aggregated_edge_features = self._aggregation_fn(
                 edge_features,

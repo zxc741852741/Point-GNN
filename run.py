@@ -9,6 +9,9 @@ from functools import partial
 import numpy as np
 import tensorflow as tf
 import open3d
+
+import sys
+sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
 import cv2
 from tqdm import tqdm
 
