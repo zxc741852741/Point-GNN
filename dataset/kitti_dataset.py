@@ -11,6 +11,7 @@ import numpy as np
 import open3d
 import cv2
 
+
 Points = namedtuple('Points', ['xyz', 'attr'])
 
 def downsample_by_average_voxel(points, voxel_size):
@@ -420,7 +421,7 @@ class KittiDataset(object):
 
         for f in file_list:
             image_file = join(image_dir, f)+'.png'
-            point_file = join(point_dir, f)+'.bin'
+            point_file = join(point_dir, '%010d'%0)+'.bin'
             label_file = join(label_dir, f)+'.txt'
             calib_file = join(calib_dir, f)+'.txt'
             assert isfile(image_file), "Image %s does not exist" % image_file
@@ -592,8 +593,7 @@ class KittiDataset(object):
 
         Returns: Points.
         """
-
-        point_file = join(self._point_dir, self._file_list[frame_idx])+'.bin'
+        point_file = join(self._point_dir, '%010d'%frame_idx)+'.bin'
         velo_data = np.fromfile(point_file, dtype=np.float32).reshape(-1, 4)
         velo_points = velo_data[:,:3]
         reflections = velo_data[:,[3]]
@@ -1393,3 +1393,16 @@ class KittiDataset(object):
             vis.run()
             vis.destroy_window()
         custom_draw_geometry_load_option(mesh_list + [pcd] + [line_set])
+
+    def ros_data_pre(self, frame_idx,ros_lidar,
+        downsample_voxel_size=None, calib=None, xyz_range=None):
+        """Get camera points that are visible in image and append image color
+        to the points as attributes."""
+        
+
+        if calib is None:
+            calib = self.get_calib(frame_idx)
+        cam_points = self.ros_get_cam_points(frame_idx,ros_lidar, downsample_voxel_size,
+            calib = calib, xyz_range=xyz_range)
+
+        return cam_points

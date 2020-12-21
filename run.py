@@ -9,6 +9,9 @@ from functools import partial
 import numpy as np
 import tensorflow as tf
 import open3d
+
+import sys
+sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
 import cv2
 from tqdm import tqdm
 
@@ -69,7 +72,7 @@ config = load_config(CONFIG_PATH)
 if IS_TEST:
     dataset = KittiDataset(
         os.path.join(DATASET_DIR, 'image/testing/image_2'),
-        os.path.join(DATASET_DIR, 'velodyne/testing/velodyne/'),
+        '/data3/2011_09_26/2011_09_26_drive_0011_sync/velodyne_points/data',
         os.path.join(DATASET_DIR, 'calib/testing/calib/'),
         '',
         num_classes=config['num_classes'],
@@ -207,9 +210,19 @@ with tf.Session(graph=graph,
             line_set = open3d.LineSet()
             graph_line_set = open3d.LineSet()
         # provide input ======================================================
+        
         cam_rgb_points = dataset.get_cam_points_in_image_with_rgb(frame_idx,
             config['downsample_by_voxel_size'])
+
+
+        print('cam_rgb_points = {}'.format(cam_rgb_points))
+
         calib = dataset.get_calib(frame_idx)
+
+        cam_rgb_points = dataset.get_velo_points(frame_idx)
+        #cam_rgb_points = dataset.ros_data_pre(frame_idx,ros_lidar,
+        #            config['downsample_by_voxel_size'],calib)
+
         image = dataset.get_image(frame_idx)
         if not IS_TEST:
             box_label_list = dataset.get_label(frame_idx)
